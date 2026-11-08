@@ -47,7 +47,6 @@ LautheitAudioProcessorEditor::LautheitAudioProcessorEditor (LautheitAudioProcess
 {
     setLookAndFeel (&lnf);
 
-    targetBox.getProperties().set ("plate", true);
     for (int i = 0; i < (int) LautheitAudioProcessor::targets().size(); ++i)
         targetBox.addItem (juce::String (juce::CharPointer_UTF8 (LautheitAudioProcessor::targets()[(size_t) i].name)), i + 1);
     addAndMakeVisible (targetBox);
@@ -60,6 +59,8 @@ LautheitAudioProcessorEditor::LautheitAudioProcessorEditor (LautheitAudioProcess
     addAndMakeVisible (transportSwitch);
     transportAttachment = std::make_unique<ButtonAttachment> (proc.apvts, "transport", transportSwitch);
 
+    rack::styleToggle (transportSwitch);
+
     resetButton.setButtonText ("RESET");
     resetButton.getProperties().set ("noLamp", true);
     resetButton.onClick = [this] { proc.requestReset(); };
@@ -71,7 +72,7 @@ LautheitAudioProcessorEditor::LautheitAudioProcessorEditor (LautheitAudioProcess
         addAndMakeVisible (c);
     }
 
-    setSize (1100, 720);
+    setSize (rackW, rackH);
     startTimerHz (60);
 }
 
@@ -264,150 +265,63 @@ void LautheitAudioProcessorEditor::Recorder::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-void LautheitAudioProcessorEditor::renderTextures()
+void LautheitAudioProcessorEditor::renderPanel()
 {
-    tolexImage = juce::Image (juce::Image::RGB, juce::jmax (1, getWidth()), juce::jmax (1, getHeight()), false);
-    {
-        juce::Image::BitmapData data (tolexImage, juce::Image::BitmapData::writeOnly);
-        juce::Random rnd (7);
-        for (int y = 0; y < tolexImage.getHeight(); ++y)
-            for (int x = 0; x < tolexImage.getWidth(); ++x)
-            {
-                const int weave = ((x + y) % 4 == 0 || (x - y + 4096) % 4 == 0) ? -5 : 0;
-                const int n = rnd.nextInt (13) - 6 + weave;
-                data.setPixelColour (x, y, juce::Colour ((juce::uint8) juce::jlimit (0, 255, 34 + n),
-                                                         (juce::uint8) juce::jlimit (0, 255, 28 + n),
-                                                         (juce::uint8) juce::jlimit (0, 255, 24 + n)));
-            }
-    }
-    if (faceplate.isEmpty())
-        return;
-    faceplateImage = juce::Image (juce::Image::ARGB, faceplate.getWidth(), faceplate.getHeight(), true);
-    juce::Graphics g (faceplateImage);
-    const auto r = faceplateImage.getBounds().toFloat();
-    g.setGradientFill (juce::ColourGradient (cream.brighter (0.06f), 0, 0, creamDark, 0, r.getHeight(), false));
-    g.fillRoundedRectangle (r, 6.0f);
-    juce::Random rnd (3);
-    for (int y = 0; y < faceplate.getHeight(); ++y)
-    {
-        g.setColour ((rnd.nextBool() ? juce::Colours::white : juce::Colour (0xff6b5534)).withAlpha (0.015f + rnd.nextFloat() * 0.035f));
-        g.drawHorizontalLine (y, 0.0f, r.getWidth());
-    }
-    g.setGradientFill (juce::ColourGradient (juce::Colours::transparentBlack, r.getCentreX(), r.getCentreY(),
-                                             juce::Colour (0x30694a1c), 0, 0, true));
-    g.fillRoundedRectangle (r, 6.0f);
-}
+    panelImage = rack::renderPanel (rackW, rackH, 29);
+    juce::Graphics g (panelImage);
+    const char* titles[] = { "PEGEL", "MESSWERTE", "INTEGRIERTE LAUTHEIT", "KURZZEIT-VERLAUF (60 S)" };
+    for (int i = 0; i < 4; ++i)
+        rack::drawSection (g, sections[(size_t) i], rack::u8 (titles[i]), lnf);
 
-void LautheitAudioProcessorEditor::drawEngraved (juce::Graphics& g, const juce::String& text, juce::Rectangle<float> r,
-                                                 juce::Font f, juce::Justification j)
-{
-    g.setFont (f);
-    g.setColour (juce::Colours::white.withAlpha (0.55f));
-    g.drawFittedText (text, r.translated (0.0f, 1.0f).toNearestInt(), j, 2, 1.0f);
-    g.setColour (ink);
-    g.drawFittedText (text, r.toNearestInt(), j, 2, 1.0f);
+    rack::drawBezel (g, vuBezelM);
+    rack::drawBezel (g, vuBezelS);
+    rack::drawLabel (g, "MOMENTAN (400 MS)", vuBezelM.toFloat().withY ((float) vuBezelM.getBottom() + 4.0f).withHeight (14.0f), lnf, 11.0f);
+    rack::drawLabel (g, "KURZZEIT (3 S)", vuBezelS.toFloat().withY ((float) vuBezelS.getBottom() + 4.0f).withHeight (14.0f), lnf, 11.0f);
+    rack::drawLabel (g, rack::u8 ("0 VU = ZIEL  \xc2\xb7  RECHTS ZU LAUT  \xc2\xb7  LINKS ZU LEISE"),
+                     juce::Rectangle<float> ((float) vuBezelM.getX(), (float) vuBezelM.getBottom() + 22.0f,
+                                             (float) (vuBezelS.getRight() - vuBezelM.getX()), 14.0f), lnf, 10.0f);
+    rack::drawBezel (g, recorderBezel, 8.0f);
+
+    rack::drawNameplate (g, nameplate, "LAUTHEIT", "LUFS-METER", lnf);
+    rack::drawLabel (g, "ZIEL", targetBox.getBounds().toFloat().withY ((float) targetBox.getY() - 16.0f).withHeight (14.0f), lnf, 11.0f, juce::Justification::centredLeft);
+    rack::drawLabel (g, "MESSEN", switchLabel.toFloat(), lnf, 11.0f, juce::Justification::centredLeft);
+    rack::drawLabel (g, "NEU MESSEN", resetLabel.toFloat(), lnf, 11.0f, juce::Justification::centredLeft);
+    rack::drawLabel (g, rack::u8 ("EBU R128 \xc2\xb7 ITU BS.1770"),
+                     juce::Rectangle<float> ((float) nameplate.getX(), (float) resetButton.getBottom() + 24.0f, (float) nameplate.getWidth(), 14.0f),
+                     lnf, 10.0f, juce::Justification::centredLeft);
+    rack::drawTypeTag (g, rack::u8 ("TYP KB-1770  \xc2\xb7  NR. 0612"), tagArea, lnf);
 }
 
 void LautheitAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.drawImageAt (tolexImage, 0, 0);
-
-    // Logo
-    const auto scriptF = lnf.scriptFont (64.0f);
-    const auto logoArea = juce::Rectangle<float> (40.0f, 8.0f, 400.0f, 84.0f);
-    g.setFont (scriptF);
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.drawText ("Klangbild", logoArea.translated (2.0f, 3.0f), juce::Justification::centredLeft);
-    g.setColour (logo);
-    g.drawText ("Klangbild", logoArea, juce::Justification::centredLeft);
-    const float sw = (float) juce::GlyphArrangement::getStringWidthInt (scriptF, "Klangbild");
-    g.setColour (gold);
-    g.setFont (lnf.labelFont (26.0f, 0.35f));
-    g.drawText ("LAUTHEIT", juce::Rectangle<float> (logoArea.getX() + sw + 14.0f, logoArea.getY() + 30.0f, 220.0f, 40.0f), juce::Justification::centredLeft);
-    g.setColour (logo.withAlpha (0.55f));
-    g.setFont (lnf.labelFont (12.0f, 0.3f));
-    g.drawText (juce::CharPointer_UTF8 ("LUFS-METER \xc2\xb7 EBU R128 \xc2\xb7 ITU BS.1770"), juce::Rectangle<float> (44.0f, 90.0f, 420.0f, 16.0f), juce::Justification::centredLeft);
-
-    const auto ta = targetArea.toFloat();
-    g.setColour (logo.withAlpha (0.6f));
-    g.setFont (lnf.labelFont (10.0f, 0.3f));
-    g.drawText ("ZIEL", ta.withY (ta.getY() - 15.0f).withHeight (13.0f), juce::Justification::centredLeft);
-
-    // Frontplatte
-    const auto fp = faceplate.toFloat();
-    g.setColour (juce::Colours::black.withAlpha (0.6f));
-    g.fillRoundedRectangle (fp.expanded (4.0f).translated (0, 2.0f), 9.0f);
-    g.setGradientFill (juce::ColourGradient (gold.brighter (0.3f), 0, fp.getY(), gold.darker (0.6f), 0, fp.getBottom(), false));
-    g.fillRoundedRectangle (fp.expanded (3.0f), 8.0f);
-    g.drawImageAt (faceplateImage, faceplate.getX(), faceplate.getY());
-    g.setColour (juce::Colours::black.withAlpha (0.35f));
-    g.drawRoundedRectangle (fp, 6.0f, 1.0f);
-    for (auto [x, y, a] : { std::tuple { fp.getX() + 12.0f, fp.getY() + 12.0f, 0.4f }, std::tuple { fp.getRight() - 12.0f, fp.getY() + 12.0f, 1.3f },
-                            std::tuple { fp.getX() + 12.0f, fp.getBottom() - 12.0f, 2.2f }, std::tuple { fp.getRight() - 12.0f, fp.getBottom() - 12.0f, 0.9f } })
-        VintageLookAndFeel::drawScrew (g, { x, y }, 5.0f, a);
-
-    // VU-Rahmen mit Titeln
-    const juce::String titles[] = { "MOMENTAN (400 MS)", "KURZZEIT (3 S)" };
-    int k = 0;
-    for (auto vbi : { vuBezelM, vuBezelS })
-    {
-        const auto vb = vbi.toFloat();
-        g.setColour (juce::Colours::black.withAlpha (0.35f));
-        g.fillRoundedRectangle (vb.translated (2.0f, 3.0f), 12.0f);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2c2520), 0, vb.getY(), juce::Colour (0xff120f0c), 0, vb.getBottom(), false));
-        g.fillRoundedRectangle (vb, 12.0f);
-        drawEngraved (g, titles[k++], vb.withY (vb.getBottom() + 4.0f).withHeight (20.0f), lnf.labelFont (13.0f, 0.18f), juce::Justification::centred);
-    }
-    drawEngraved (g, juce::CharPointer_UTF8 ("0 VU = ZIEL \xc2\xb7 RECHTS ZU LAUT \xc2\xb7 LINKS ZU LEISE"),
-                  juce::Rectangle<float> ((float) vuBezelM.getX(), (float) vuBezelM.getBottom() + 24.0f, (float) (vuBezelS.getRight() - vuBezelM.getX()), 16.0f),
-                  lnf.labelFontRegular (11.0f), juce::Justification::centred);
-
-    // Schreiber-Rahmen
-    const auto rb = recorderBezel.toFloat();
-    g.setColour (juce::Colours::black.withAlpha (0.35f));
-    g.fillRoundedRectangle (rb.translated (2.0f, 3.0f), 10.0f);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2c2520), 0, rb.getY(), juce::Colour (0xff120f0c), 0, rb.getBottom(), false));
-    g.fillRoundedRectangle (rb, 10.0f);
-    drawEngraved (g, "KURZZEIT-VERLAUF (60 S)", rb.withY (rb.getY() - 20.0f).withHeight (16.0f).withWidth (300.0f), lnf.labelFont (12.0f, 0.18f), juce::Justification::centredLeft);
-
-    drawEngraved (g, "MESSEN", switchLabel.toFloat(), lnf.labelFont (12.0f, 0.14f), juce::Justification::centred);
-    drawEngraved (g, "NEU MESSEN", resetLabel.toFloat(), lnf.labelFont (12.0f, 0.14f), juce::Justification::centred);
-
-    const auto tag = tagArea.toFloat();
-    g.setColour (ink.withAlpha (0.85f));
-    g.fillRoundedRectangle (tag, 3.0f);
-    g.setColour (gold);
-    g.setFont (lnf.labelFont (11.0f, 0.2f));
-    g.drawText ("MODELL KB-1770", tag, juce::Justification::centred);
+    g.drawImageAt (panelImage, 0, 0);
 }
 
 void LautheitAudioProcessorEditor::resized()
 {
-    const int W = getWidth();
-    targetArea = { 44, 128, 360, 32 };
-    targetBox.setBounds (targetArea);
-    mainReadout.setBounds (W - 500, 22, 470, 130);
+    const int top = 30, bottom = rackH - 34;
+    const int r1 = top + 270, r2 = r1 + 12, r2b = r2 + 150, r3 = r2b + 12;
+    sections[0] = { 72, top, 600, r1 - top };
+    sections[1] = { 684, top, 346, r1 - top };
+    sections[2] = { 72, r2, 958, r2b - r2 };
+    sections[3] = { 72, r3, 958, bottom - r3 };
 
-    faceplate = { 24, 178, W - 48, getHeight() - 178 - 22 };
-    const auto in = faceplate.reduced (30, 22);
-
-    // obere Reihe: VU M | VU S | Seitenanzeige
-    vuBezelM = { in.getX(), in.getY() + 4, 282, 214 };
-    vuBezelS = { in.getX() + 300, in.getY() + 4, 282, 214 };
+    vuBezelM = { sections[0].getX() + 14, top + 22, 282, 200 };
+    vuBezelS = { sections[0].getRight() - 14 - 282, top + 22, 282, 200 };
     vuM.setBounds (vuBezelM.reduced (9));
     vuS.setBounds (vuBezelS.reduced (9));
-    sideReadout.setBounds (in.getX() + 610, in.getY(), 230, 222);
+    sideReadout.setBounds (sections[1].reduced (14).withTrimmedTop (10));
+    mainReadout.setBounds (sections[2].reduced (14).withTrimmedTop (8));
+    recorderBezel = sections[3].reduced (14).withTrimmedTop (8);
+    recorder.setBounds (recorderBezel.reduced (7));
 
-    const int ctrlX = in.getX() + 860, ctrlW = in.getRight() - ctrlX;
-    switchLabel = { ctrlX, in.getY() + 6, ctrlW, 16 };
-    transportSwitch.setBounds (ctrlX + (ctrlW - 130) / 2, in.getY() + 28, 130, 40);
-    resetLabel = { ctrlX, in.getY() + 92, ctrlW, 16 };
-    resetButton.setBounds (ctrlX + (ctrlW - 100) / 2, in.getY() + 114, 100, 38);
-    tagArea = { ctrlX + (ctrlW - 120) / 2, in.getY() + 186, 120, 24 };
-
-    // unten: Schreiber
-    recorderBezel = { in.getX(), in.getY() + 286, in.getWidth(), in.getBottom() - (in.getY() + 286) };
-    recorder.setBounds (recorderBezel.reduced (8));
-
-    renderTextures();
+    const int colX = 1046, colW = rackW - 56 - 16 - colX;
+    nameplate = { colX, top - 8, colW, 88 };
+    targetBox.setBounds (colX, top + 112, colW, 28);
+    switchLabel = { colX + 4, top + 168, colW, 14 };
+    transportSwitch.setBounds (colX + 4, top + 186, 150, 40);
+    resetLabel = { colX + 4, top + 252, colW, 14 };
+    resetButton.setBounds (colX + 4, top + 272, 110, 36);
+    tagArea = { colX - 60, rackH - 28, colW + 60, 16 };
+    renderPanel();
 }

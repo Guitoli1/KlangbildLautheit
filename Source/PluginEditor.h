@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
 #include "VintageUI.h"
+#include "RackStyle.h"
 
 class LautheitAudioProcessorEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
@@ -18,8 +19,7 @@ private:
     using ComboAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
 
     void timerCallback() override;
-    void renderTextures();
-    void drawEngraved (juce::Graphics&, const juce::String&, juce::Rectangle<float>, juce::Font, juce::Justification);
+    void renderPanel();
 
     // gemeinsame Werte für die Anzeigen
     struct Values
@@ -54,7 +54,7 @@ private:
     };
 
     LautheitAudioProcessor& proc;
-    VintageLookAndFeel lnf;
+    RackLookAndFeel lnf;
     Values values;
 
     juce::ComboBox targetBox;
@@ -69,8 +69,10 @@ private:
     Recorder recorder { lnf, proc, values };
     int frame = 0;
 
-    juce::Rectangle<int> faceplate, targetArea, vuBezelM, vuBezelS, tagArea, switchLabel, resetLabel, recorderBezel;
-    juce::Image tolexImage, faceplateImage;
+    static constexpr int rackW = 1280, rackH = 780;
+    std::array<juce::Rectangle<int>, 4> sections;
+    juce::Rectangle<int> nameplate, vuBezelM, vuBezelS, tagArea, switchLabel, resetLabel, recorderBezel;
+    juce::Image panelImage;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LautheitAudioProcessorEditor)
 };
