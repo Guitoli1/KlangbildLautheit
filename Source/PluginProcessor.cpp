@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "ScaledEditor.h"
 
 const std::vector<LautheitAudioProcessor::Target>& LautheitAudioProcessor::targets()
 {
@@ -140,7 +141,7 @@ void LautheitAudioProcessor::setStateInformation (const void* data, int sizeInBy
             rp->setValueNotifyingHost (rp->convertTo0to1 (rp->convertFrom0to1 (rp->getValue())));
 }
 
-juce::AudioProcessorEditor* LautheitAudioProcessor::createEditor() { return new LautheitAudioProcessorEditor (*this); }
+juce::AudioProcessorEditor* LautheitAudioProcessor::createEditor() { return new kb::ScaledEditor (*this, new LautheitAudioProcessorEditor (*this)); }
 
 #ifndef KB_EMBEDDED
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new LautheitAudioProcessor(); }
